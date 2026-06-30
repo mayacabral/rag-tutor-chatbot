@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Upload, FileText, Trash2, RefreshCw, AlertCircle } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -121,7 +120,7 @@ export function Sidebar() {
       </div>
 
       {/* Documents List */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="p-4 space-y-2">
           {isLoading ? (
             <>
@@ -137,7 +136,7 @@ export function Sidebar() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 min-w-0">
                       <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" />
                       <p className="text-sm font-medium text-white truncate">{doc.fonte}</p>
                     </div>
@@ -151,7 +150,7 @@ export function Sidebar() {
                     size="sm"
                     onClick={() => deleteMutation.mutate(doc.fonte)}
                     disabled={deleteMutation.isPending}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    className="flex-shrink-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -165,7 +164,7 @@ export function Sidebar() {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer */}
       <div className="p-4 border-t border-slate-700">
