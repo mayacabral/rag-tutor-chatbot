@@ -3,20 +3,14 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut, Settings, User } from "lucide-react";
-import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 export function Header() {
   const { user, logout } = useAuth();
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      logout();
-      toast.success("Desconectado com sucesso");
-    },
-  });
 
   const handleLogout = () => {
-    logoutMutation.mutate();
+    toast.success("Desconectado com sucesso");
+    logout();
   };
 
   const userInitials = user?.name
