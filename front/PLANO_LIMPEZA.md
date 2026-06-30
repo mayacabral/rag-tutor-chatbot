@@ -1,7 +1,22 @@
 # Plano de Limpeza — `/front`
 
-> Levantamento de código não utilizado no frontend, para decidirmos **manter ou remover**.
-> Documento de análise — **nada foi removido ainda**. Cada item traz confiança e trade-offs.
+> Levantamento de código não utilizado no frontend.
+> **Status: Fase 1 ✅ concluída · Fase 2 ✅ concluída · Fase 3 ✅ verificada.**
+
+## ✅ Status de execução (atualizado)
+
+| Fase | Estado | Commit |
+|------|--------|--------|
+| Snapshot inicial (rede de segurança) | ✅ | `9e92bb3` |
+| **Fase 1** — código morto (componentes, hooks, UI, módulos, deps) | ✅ concluída | `35c744d` |
+| **Fase 2** — aposentar backend tRPC/MySQL/S3 | ✅ concluída | `beb7c3f` |
+| **Fase 3** — verificação (`tsc`, Vite, app) | ✅ sem erros | — |
+
+**Resultado:** ~80 arquivos e ~40 dependências removidos. Arquitetura final:
+`front (React+Vite, servidor só serve o frontend) → API Python (FastAPI/RAG) → MongoDB Atlas + HuggingFace`.
+O app segue 100% funcional (Dashboard / Login / 404). Tudo reversível via git.
+
+---
 
 ## Contexto: a "realidade" atual da arquitetura
 
@@ -128,22 +143,24 @@ Consequência: `server/db.ts` (Drizzle/MySQL), `server/storage.ts` (S3), `drizzl
 
 ---
 
-## Plano de execução sugerido (em fases, do mais seguro ao mais estratégico)
+## Plano de execução (em fases, do mais seguro ao mais estratégico)
 
-**Fase 1 — Lixo óbvio (🟢, risco baixo, reversível-ish):**
-1. Remover componentes mortos: `AIChatBox, ChatBox, DashboardLayout, DashboardLayoutSkeleton, ManusDialog, Map`.
-2. Remover hooks mortos: `useConversations, useDocuments, useComposition, usePersistFn, useMobile`.
-3. Remover os 25 UI shadcn sem referência.
-4. Remover módulos `_core` mortos: `dataApi, heartbeat, imageGeneration, map, voiceTranscription`.
-5. `pnpm remove` de `@aws-sdk/*`, `recharts`, `framer-motion`.
-6. Limpar `references/`, `.manus-logs/`.
+**Fase 1 — Lixo óbvio (🟢, risco baixo) — ✅ CONCLUÍDA (`35c744d`):**
+1. ✅ Removidos componentes mortos: `AIChatBox, ChatBox, DashboardLayout, DashboardLayoutSkeleton, ManusDialog, Map`.
+2. ✅ Removidos hooks mortos: `useConversations, useDocuments, useComposition, usePersistFn, useMobile`.
+3. ✅ Removidos 25 UI shadcn sem referência (42 → 17).
+4. ✅ Removidos módulos `_core` mortos: `dataApi, heartbeat, imageGeneration, map, voiceTranscription`.
+5. ✅ `pnpm remove` de `@aws-sdk/*`, `recharts`, `framer-motion` + 17 `@radix-ui/*` não usados + `embla/vaul/cmdk/input-otp/react-day-picker/react-resizable-panels/add` (28 no total).
+6. ✅ Limpas `references/`, `.manus-logs/`.
 
-**Fase 2 — Decisão estratégica (🔴, precisa do seu "sim"):**
-7. Aposentar o backend tRPC/MySQL/S3: `conversation/message/document/ragStats` routers, `db.ts`, `storage.ts`, `drizzle/`, `_core/llm.ts`, e remover `mysql2/drizzle-*`.
-   - **Pré-requisito:** decidir o que fazer com o **logout** (única rota tRPC viva) — pode virar um logout local simples, já que o auth é mockado.
+**Fase 2 — Decisão estratégica (🔴) — ✅ CONCLUÍDA (`beb7c3f`):**
+7. ✅ Backend tRPC/MySQL/S3 aposentado: removidos `routers.ts`, `db.ts`, `storage.ts`, `drizzle/`, e os módulos `_core` `llm/oauth/context/cookies/sdk/notification/trpc/env/storageProxy/systemRouter`. Servidor reduzido a **Express + Vite** (`index.ts` + `vite.ts`).
+   - ✅ **Logout** virou local (usa `useAuth().logout` mockado, sem tRPC).
+   - ✅ Cliente: removido `lib/trpc.ts` e o provider em `main.tsx`.
+   - ✅ Deps removidas: `@trpc/*`, `superjson`, `mysql2`, `drizzle-orm`, `drizzle-kit`, `jose`, `cookie`, `zod`, `react-hook-form`, `@hookform/resolvers` + script `db:push`.
 
-**Fase 3 — Verificação:**
-8. `pnpm check` (TypeScript) + subir o app e validar as 3 telas (Dashboard, Login, 404).
+**Fase 3 — Verificação — ✅ FEITA:**
+8. ✅ `pnpm check` (`tsc --noEmit`) sem erros + app sobe e renderiza as 3 telas (Dashboard/Login/404).
 
 ## Matriz de decisão (manter × remover)
 
@@ -156,9 +173,14 @@ Consequência: `server/db.ts` (Drizzle/MySQL), `server/storage.ts` (S3), `drizzl
 
 ---
 
-## Recomendação
+## Recomendação — ✅ executada
 
-- **Fazer a Fase 1 sem hesitar** — é puramente código morto, baixo risco, e melhora muito a clareza.
-- **Discutir a Fase 2** — depende da sua visão de produto: se o objetivo é só o **chat RAG via API Python**, o backend Manus inteiro é peso morto e vale remover. Se há intenção de ter histórico/multiusuário no futuro, vale manter (mesmo órfão) ou portar para a API Python.
+- **Fase 1 e Fase 2 foram executadas** (o objetivo é o **chat RAG via API Python**; o backend Manus era peso morto).
+- O projeto **agora está sob git** (`git init` feito), com um commit por fase — tudo reversível via `git revert`/`git checkout`.
 
-> **Importante:** o projeto **não está sob git**. Antes de executar qualquer remoção, recomendo `git init` + commit inicial, para que tudo seja reversível.
+### Itens 🟡 que ficaram (opcional, baixa prioridade)
+- 4 UI shadcn ainda presentes mas usados só internamente por `ui/sidebar` (não usado pelo app): `sheet, separator, toggle, sidebar`. Podem ser removidos se o `ui/sidebar` também sair.
+- Artefatos Manus restantes: `template.json`, `todo.md`, `client/public/__manus__/`, `vite-plugin-manus-runtime`/coletor de debug no `vite.config`. Mantidos por enquanto (ligados ao build).
+
+### Se um dia quiser histórico/multiusuário
+Seria portado para a **API Python** (ex.: coleções no MongoDB para conversas/mensagens), e não o retorno do stack MySQL/tRPC da Manus.
