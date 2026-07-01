@@ -2,19 +2,26 @@ from __future__ import annotations
 
 import os
 from io import BytesIO
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import docx
+import pdfplumber
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from langchain_classic.chains import ConversationalRetrievalChain
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_huggingface import (
+    ChatHuggingFace,
+    HuggingFaceEndpoint,
+    HuggingFaceEndpointEmbeddings,
+)
+from langchain_mongodb import MongoDBAtlasVectorSearch
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:  # apenas para anotações de tipo; não carrega o stack pesado
-    from langchain_classic.chains import ConversationalRetrievalChain
-    from langchain_core.documents import Document
-    from langchain_core.embeddings import Embeddings
-    from langchain_huggingface import ChatHuggingFace
-    from langchain_mongodb import MongoDBAtlasVectorSearch
+from pymongo import MongoClient
 
 load_dotenv()
 
@@ -32,10 +39,8 @@ def carregar_documento(arquivo, nome_arquivo: str) -> list[Document]:
         return carregar_txt(arquivo, nome_arquivo)
     raise ValueError(f"Extensão não suportada: {extensao}")
 
-def carregar_pdf(arquivo, nome_arquivo: str) -> list[Document]:
-    import pdfplumber
-    from langchain_core.documents import Document
 
+def carregar_pdf(arquivo, nome_arquivo: str) -> list[Document]:
     documentos = []
     with pdfplumber.open(arquivo) as pdf:
         for numero_pagina, pagina in enumerate(pdf.pages, start=1):
@@ -51,9 +56,6 @@ def carregar_pdf(arquivo, nome_arquivo: str) -> list[Document]:
 
 
 def carregar_docx(arquivo, nome_arquivo: str) -> list[Document]:
-    import docx
-    from langchain_core.documents import Document
-
     leitor = docx.Document(arquivo)
     texto = "\n".join(p.text for p in leitor.paragraphs if p.text.strip())
     if not texto.strip():
@@ -62,8 +64,6 @@ def carregar_docx(arquivo, nome_arquivo: str) -> list[Document]:
 
 
 def carregar_txt(arquivo, nome_arquivo: str) -> list[Document]:
-    from langchain_core.documents import Document
-
     conteudo = arquivo.read()
     texto = conteudo.decode("utf-8") if isinstance(conteudo, bytes) else conteudo
     if not texto.strip():
@@ -71,14 +71,11 @@ def carregar_txt(arquivo, nome_arquivo: str) -> list[Document]:
     return [Document(page_content=texto, metadata={"fonte": nome_arquivo, "pagina": 1})]
 
 
-
 # ==========================================
 # CHUNKER — divisão em chunks
 # ==========================================
 
 def dividir_em_chunks(documentos: list[Document], tamanho: int = 500, sobreposicao: int = 50) -> list[Document]:
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
     splitter = RecursiveCharacterTextSplitter(chunk_size=tamanho, chunk_overlap=sobreposicao)
     return splitter.split_documents(documentos)
 
@@ -91,13 +88,11 @@ EMBEDDER_PADRAO = "BAAI/bge-m3"
 DIMENSOES_EMBEDDING = 1024  # dimensão do vetor produzido por EMBEDDER_PADRAO
 
 
-def criar_embedder(modelo: str = EMBEDDER_PADRAO):
+def criar_embedder(modelo: str = EMBEDDER_PADRAO) -> HuggingFaceEndpointEmbeddings:
     # Embeddings via API da HuggingFace (nuvem) — não exige torch/sentence-transformers
     # localmente. Usa o BAAI/bge-m3 (1024 dims): forte em retrieval multilíngue (PT),
     # sem necessidade de prefixos "query/passage". Trocar o modelo exige reindexar
     # os documentos e recriar o índice de Atlas Search com a nova dimensão.
-    from langchain_huggingface import HuggingFaceEndpointEmbeddings
-
     return HuggingFaceEndpointEmbeddings(
         model=modelo,
         huggingfacehub_api_token=os.environ.get("HUGGINGFACEHUB_API_TOKEN"),
@@ -114,15 +109,11 @@ NOME_INDICE_VETORIAL = "vector_index"
 
 
 def obter_collection():
-    from pymongo import MongoClient
-
     cliente = MongoClient(os.environ["MONGODB_URI"])
     return cliente[NOME_BANCO][NOME_COLLECTION]
 
 
 def indexar(chunks: list[Document], embedder: Embeddings) -> MongoDBAtlasVectorSearch:
-    from langchain_mongodb import MongoDBAtlasVectorSearch
-
     colecao = obter_collection()
     vector_store = MongoDBAtlasVectorSearch.from_documents(
         documents=chunks,
@@ -143,8 +134,6 @@ def obter_vector_store(embedder: Embeddings | None = None) -> MongoDBAtlasVector
     # Conecta ao índice JÁ existente no MongoDB, sem depender de upload na sessão.
     # É o que permite que o chat (admin OU aluno) consulte os documentos que o
     # admin indexou — inclusive depois de reiniciar a API.
-    from langchain_mongodb import MongoDBAtlasVectorSearch
-
     if embedder is None:
         embedder = criar_embedder()
     return MongoDBAtlasVectorSearch(
@@ -168,8 +157,6 @@ MODELO_PADRAO = "Qwen/Qwen2.5-7B-Instruct"
 
 
 def criar_llm(modelo: str = MODELO_PADRAO, temperatura: float = 0.1) -> ChatHuggingFace:
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-
     endpoint = HuggingFaceEndpoint(
         repo_id=modelo,
         huggingfacehub_api_token=os.environ.get("HUGGINGFACEHUB_API_TOKEN"),
@@ -180,8 +167,6 @@ def criar_llm(modelo: str = MODELO_PADRAO, temperatura: float = 0.1) -> ChatHugg
 
 
 def criar_chain(indice: MongoDBAtlasVectorSearch, llm: ChatHuggingFace, k: int = 4) -> ConversationalRetrievalChain:
-    from langchain_classic.chains import ConversationalRetrievalChain
-
     retriever = indice.as_retriever(search_kwargs={"k": k})
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
@@ -230,21 +215,17 @@ REVISOR_SISTEMA = (
 )
 
 
-def criar_revisor(modelo: str = REVISOR_MODELO, temperatura: float = 0.2):
-    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
-
+def criar_revisor(modelo: str = REVISOR_MODELO) -> ChatHuggingFace:
     endpoint = HuggingFaceEndpoint(
         repo_id=modelo,
         huggingfacehub_api_token=os.environ.get("HUGGINGFACEHUB_API_TOKEN"),
-        temperature=temperatura,
+        temperature=0.2,
         max_new_tokens=512,
     )
     return ChatHuggingFace(llm=endpoint)
 
 
 def revisar_resposta(pergunta: str, contexto: str, resposta_bruta: str) -> str:
-    from langchain_core.messages import HumanMessage, SystemMessage
-
     revisor = criar_revisor()
     humano = (
         f"Pergunta do aluno:\n{pergunta}\n\n"
