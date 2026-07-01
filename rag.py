@@ -12,7 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_classic.chains import ConversationalRetrievalChain
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import Runnable
 from langchain_huggingface import (
     ChatHuggingFace,
     HuggingFaceEndpoint,
@@ -215,14 +217,25 @@ REVISOR_SISTEMA = (
 )
 
 
-def criar_revisor(modelo: str = REVISOR_MODELO) -> ChatHuggingFace:
+def criar_revisor(modelo: str = REVISOR_MODELO) -> Runnable:
+    # Já embute o REVISOR_SISTEMA (regras do tutor) no revisor: qualquer chamada
+    # aplica o system prompt automaticamente. O MessagesPlaceholder recebe a
+    # mensagem humana como está (sem parsing de template), evitando problemas
+    # caso o contexto contenha chaves { }.
     endpoint = HuggingFaceEndpoint(
         repo_id=modelo,
         huggingfacehub_api_token=os.environ.get("HUGGINGFACEHUB_API_TOKEN"),
         temperature=0.2,
         max_new_tokens=512,
     )
-    return ChatHuggingFace(llm=endpoint)
+    chat = ChatHuggingFace(llm=endpoint)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", REVISOR_SISTEMA),
+            MessagesPlaceholder("mensagens"),
+        ]
+    )
+    return prompt | chat
 
 
 def revisar_resposta(pergunta: str, contexto: str, resposta_bruta: str) -> str:
@@ -233,7 +246,7 @@ def revisar_resposta(pergunta: str, contexto: str, resposta_bruta: str) -> str:
         f"Resposta bruta do sistema:\n{resposta_bruta}\n\n"
         "Reescreva a melhor resposta final para o aluno, seguindo as regras."
     )
-    saida = revisor.invoke([SystemMessage(content=REVISOR_SISTEMA), HumanMessage(content=humano)])
+    saida = revisor.invoke({"mensagens": [HumanMessage(content=humano)]})
     texto = getattr(saida, "content", str(saida)).strip()
     return texto or resposta_bruta
 
