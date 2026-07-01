@@ -205,12 +205,13 @@ def perguntar(chain: ConversationalRetrievalChain, pergunta: str, historico: lis
 
 
 # ==========================================
-# REVISOR — 2ª IA que refina a resposta do RAG (HuggingFace)
+# REVISOR — 2ª IA que refina a resposta do RAG
 # ==========================================
 # Reaproveita o mesmo stack (HuggingFace) — sem nova dependência nem chave.
-# Ligue/desligue por env REVISOR_ATIVO; troque o modelo por REVISOR_MODELO.
+# Neste projeto o revisor fica SEMPRE ativo (não é desligável por ambiente).
+# O modelo do revisor ainda pode ser trocado por env REVISOR_MODELO.
 
-REVISOR_ATIVO = os.environ.get("REVISOR_ATIVO", "true").strip().lower() in ("1", "true", "sim", "yes")
+REVISOR_ATIVO = True
 REVISOR_MODELO = os.environ.get("REVISOR_MODELO", "Qwen/Qwen2.5-7B-Instruct")
 
 REVISOR_SISTEMA = (
