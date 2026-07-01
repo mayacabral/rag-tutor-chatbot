@@ -212,7 +212,9 @@ def perguntar(chain: ConversationalRetrievalChain, pergunta: str, historico: lis
 # O modelo do revisor ainda pode ser trocado por env REVISOR_MODELO.
 
 REVISOR_ATIVO = True
-REVISOR_MODELO = os.environ.get("REVISOR_MODELO", "Qwen/Qwen2.5-7B-Instruct")
+# Revisor usa um modelo mais forte que o gerador (7B): o Qwen2.5-72B-Instruct
+# entrega reescrita mais fiel e didática. Pode ser trocado por env REVISOR_MODELO.
+REVISOR_MODELO = os.environ.get("REVISOR_MODELO", "Qwen/Qwen2.5-72B-Instruct")
 
 REVISOR_SISTEMA = (
     "Você é um tutor de turma. Sua tarefa é reescrever a resposta do sistema para o aluno "
