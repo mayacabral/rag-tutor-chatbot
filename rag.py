@@ -138,6 +138,23 @@ def indexar(chunks: list[Document], embedder: Embeddings) -> MongoDBAtlasVectorS
     return vector_store
 
 
+def obter_vector_store(embedder: Embeddings | None = None) -> MongoDBAtlasVectorSearch:
+    # Conecta ao índice JÁ existente no MongoDB, sem depender de upload na sessão.
+    # É o que permite que o chat (admin OU aluno) consulte os documentos que o
+    # admin indexou — inclusive depois de reiniciar a API.
+    from langchain_mongodb import MongoDBAtlasVectorSearch
+
+    if embedder is None:
+        embedder = criar_embedder()
+    return MongoDBAtlasVectorSearch(
+        collection=obter_collection(),
+        embedding=embedder,
+        index_name=NOME_INDICE_VETORIAL,
+        text_key="text",
+        embedding_key="embedding",
+    )
+
+
 def buscar(indice: MongoDBAtlasVectorSearch, pergunta: str, k: int = 4) -> list[Document]:
     return indice.similarity_search(pergunta, k=k)
 
@@ -174,11 +191,66 @@ def criar_chain(indice: MongoDBAtlasVectorSearch, llm: ChatHuggingFace, k: int =
 
 def perguntar(chain: ConversationalRetrievalChain, pergunta: str, historico: list[tuple[str, str]]) -> dict:
     resultado = chain.invoke({"question": pergunta, "chat_history": historico})
+    docs = resultado.get("source_documents", [])
     fontes = [
         {"arquivo": doc.metadata.get("fonte"), "pagina": doc.metadata.get("pagina")}
-        for doc in resultado.get("source_documents", [])
+        for doc in docs
     ]
-    return {"resposta": resultado["answer"], "fontes": fontes}
+    # Texto dos trechos recuperados — usado pelo revisor para reescrever com fidelidade.
+    contexto = "\n\n".join(
+        f"[fonte: {doc.metadata.get('fonte')} | pág. {doc.metadata.get('pagina')}]\n{doc.page_content}"
+        for doc in docs
+    )
+    return {"resposta": resultado["answer"], "fontes": fontes, "contexto": contexto}
+
+
+# ==========================================
+# REVISOR — 2ª IA que refina a resposta do RAG (HuggingFace)
+# ==========================================
+# Reaproveita o mesmo stack (HuggingFace) — sem nova dependência nem chave.
+# Ligue/desligue por env REVISOR_ATIVO; troque o modelo por REVISOR_MODELO.
+
+REVISOR_ATIVO = os.environ.get("REVISOR_ATIVO", "true").strip().lower() in ("1", "true", "sim", "yes")
+REVISOR_MODELO = os.environ.get("REVISOR_MODELO", "Qwen/Qwen2.5-7B-Instruct")
+
+REVISOR_SISTEMA = (
+    "Você é um tutor de turma. Sua tarefa é reescrever a resposta do sistema para o aluno "
+    "de forma clara, didática e acolhedora. Regras:\n"
+    "1) Baseie-se SOMENTE no contexto fornecido (os trechos dos documentos). Não invente "
+    "fatos que não estejam no contexto; se a informação não constar, diga que não consta "
+    "nos documentos.\n"
+    "2) Não invente novas fontes. Se citar, use as fontes do contexto.\n"
+    "3) Priorize clareza: use frases diretas, passos ou listas quando ajudar.\n"
+    "4) Não repita a pergunta nem escreva preâmbulos; responda direto ao aluno.\n"
+    "Responda em português do Brasil."
+)
+
+
+def criar_revisor(modelo: str = REVISOR_MODELO, temperatura: float = 0.2):
+    from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+
+    endpoint = HuggingFaceEndpoint(
+        repo_id=modelo,
+        huggingfacehub_api_token=os.environ.get("HUGGINGFACEHUB_API_TOKEN"),
+        temperature=temperatura,
+        max_new_tokens=512,
+    )
+    return ChatHuggingFace(llm=endpoint)
+
+
+def revisar_resposta(pergunta: str, contexto: str, resposta_bruta: str) -> str:
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    revisor = criar_revisor()
+    humano = (
+        f"Pergunta do aluno:\n{pergunta}\n\n"
+        f"Trechos recuperados (contexto):\n{contexto}\n\n"
+        f"Resposta bruta do sistema:\n{resposta_bruta}\n\n"
+        "Reescreva a melhor resposta final para o aluno, seguindo as regras."
+    )
+    saida = revisor.invoke([SystemMessage(content=REVISOR_SISTEMA), HumanMessage(content=humano)])
+    texto = getattr(saida, "content", str(saida)).strip()
+    return texto or resposta_bruta
 
 
 # ==========================================
@@ -342,14 +414,32 @@ def statistics() -> dict[str, Any]:
 
 @app.post("/perguntar", response_model=AskResponse)
 def ask_question(payload: AskRequest) -> AskResponse:
-    if app_state["vector_store"] is None:
-        raise HTTPException(status_code=400, detail="No documents have been indexed yet")
-
+    # Consulta SEMPRE o índice persistido no MongoDB (não o estado em memória).
+    # Assim, tanto o chat do admin quanto o do aluno respondem com base nos
+    # documentos que o admin indexou — mesmo após reiniciar a API.
     try:
+        if obter_collection().count_documents({}) == 0:
+            raise HTTPException(status_code=400, detail="No documents have been indexed yet")
+
+        vector_store = obter_vector_store()
         llm = criar_llm()
-        chain = criar_chain(app_state["vector_store"], llm)
+        chain = criar_chain(vector_store, llm)
         resultado = perguntar(chain, payload.question, payload.history or [])
-        return AskResponse(answer=resultado["resposta"], sources=resultado["fontes"])
+
+        resposta_final = resultado["resposta"]
+        # 2ª IA (revisor): refina a resposta com base no contexto recuperado.
+        # Se falhar (cota/timeout/erro), cai de volta para a resposta bruta.
+        if REVISOR_ATIVO and resultado.get("contexto"):
+            try:
+                resposta_final = revisar_resposta(
+                    payload.question, resultado["contexto"], resultado["resposta"]
+                )
+            except Exception:  # pragma: no cover - fallback defensivo
+                resposta_final = resultado["resposta"]
+
+        return AskResponse(answer=resposta_final, sources=resultado["fontes"])
+    except HTTPException:
+        raise
     except KeyError as exc:
         raise HTTPException(status_code=500, detail=f"Missing configuration: {exc}") from exc
     except Exception as exc:  # pragma: no cover - defensive path

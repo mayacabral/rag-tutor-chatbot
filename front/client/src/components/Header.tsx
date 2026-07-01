@@ -23,10 +23,7 @@ export function Header() {
   return (
     <header className="border-b border-slate-700 bg-slate-900/50 backdrop-blur-sm px-6 py-4 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">RAG</span>
-        </div>
-        <h1 className="text-xl font-bold text-white">RAG Tutor System</h1>
+        <h1 className="text-xl font-bold text-white">Tutor de turma</h1>
       </div>
 
       <div className="flex items-center gap-4">
