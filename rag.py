@@ -199,20 +199,23 @@ def perguntar(chain: ConversationalRetrievalChain, pergunta: str, historico: lis
 # Neste projeto o revisor fica SEMPRE ativo (não é desligável por ambiente).
 # O modelo do revisor ainda pode ser trocado por env REVISOR_MODELO.
 
-REVISOR_ATIVO = True
 # Revisor usa um modelo mais forte que o gerador (7B): o Qwen2.5-72B-Instruct
 # entrega reescrita mais fiel e didática. Pode ser trocado por env REVISOR_MODELO.
 REVISOR_MODELO = os.environ.get("REVISOR_MODELO", "Qwen/Qwen2.5-72B-Instruct")
 
 REVISOR_SISTEMA = (
-    "Você é um tutor de turma. Sua tarefa é reescrever a resposta do sistema para o aluno "
+    "Você é o Tutor de Turma, um assistente que ajuda os alunos a estudar o conteúdo dos "
+    "documentos da disciplina. Sua tarefa é reescrever a resposta do sistema para o aluno "
     "de forma clara, didática e acolhedora. Regras:\n"
-    "1) Baseie-se SOMENTE no contexto fornecido (os trechos dos documentos). Não invente "
-    "fatos que não estejam no contexto; se a informação não constar, diga que não consta "
-    "nos documentos.\n"
-    "2) Não invente novas fontes. Se citar, use as fontes do contexto.\n"
-    "3) Priorize clareza: use frases diretas, passos ou listas quando ajudar.\n"
-    "4) Não repita a pergunta nem escreva preâmbulos; responda direto ao aluno.\n"
+    "1) Para perguntas sobre CONTEÚDO, baseie-se SOMENTE no contexto fornecido (os trechos "
+    "dos documentos). Não invente fatos que não estejam no contexto; se a informação não "
+    "constar, diga que não consta nos documentos.\n"
+    "2) Se perguntarem quem você é, qual seu nome ou seu papel, responda que você é o Tutor "
+    "de Turma, que ajuda os alunos a estudar com base nos documentos da disciplina. Essa "
+    "identidade vale mesmo quando não há nada sobre isso nos documentos.\n"
+    "3) Não invente novas fontes. Se citar, use as fontes do contexto.\n"
+    "4) Priorize clareza: use frases diretas, passos ou listas quando ajudar.\n"
+    "5) Não repita a pergunta nem escreva preâmbulos; responda direto ao aluno.\n"
     "Responda em português do Brasil."
 )
 
@@ -423,12 +426,14 @@ def ask_question(payload: AskRequest) -> AskResponse:
         vector_store = obter_vector_store()
         llm = criar_llm()
         chain = criar_chain(vector_store, llm)
+        #Aqui é onde a pergunta é feita ao RAG (retriever + LLM) e a resposta bruta é obtida.
         resultado = perguntar(chain, payload.question, payload.history or [])
 
+        #Aqui é a resposta bruta
         resposta_final = resultado["resposta"]
         # 2ª IA (revisor): refina a resposta com base no contexto recuperado.
         # Se falhar (cota/timeout/erro), cai de volta para a resposta bruta.
-        if REVISOR_ATIVO and resultado.get("contexto"):
+        if resultado.get("contexto"):
             try:
                 resposta_final = revisar_resposta(
                     payload.question, resultado["contexto"], resultado["resposta"]
