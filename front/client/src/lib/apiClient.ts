@@ -58,7 +58,8 @@ export interface RagStats {
   status: string;
   documentos: number;
   chunks: number;
-  modelo_llm: string;
+  modelo_saida: string;
+  modelo_resposta: string;
   embedder: string;
   banco_vetorial: string;
   dimensao: number;

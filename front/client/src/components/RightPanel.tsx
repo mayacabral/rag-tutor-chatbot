@@ -103,8 +103,12 @@ export function RightPanel() {
               ) : (
                 <>
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-slate-400">Modelo LLM</span>
-                    <span className="text-white font-medium break-words">{stats?.modelo_llm ?? "—"}</span>
+                    <span className="text-slate-400">Modelo LLM da saída</span>
+                    <span className="text-white font-medium break-words">{stats?.modelo_saida ?? "—"}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-slate-400">Modelo LLM da resposta</span>
+                    <span className="text-white font-medium break-words">{stats?.modelo_resposta ?? "—"}</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="text-slate-400">Embedder</span>
