@@ -1,0 +1,33 @@
+# ==========================================
+# Tutor de Turma — stack completo (API Python + Frontend)
+# Subir tudo:   docker compose up --build
+# As variáveis HUGGINGFACEHUB_API_TOKEN e MONGODB_URI são lidas do arquivo .env
+# na raiz (o mesmo .env já usado localmente). O MongoDB é o Atlas (nuvem).
+# ==========================================
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tutor-turma-api
+    ports:
+      - "8000:8000"
+    environment:
+      HUGGINGFACEHUB_API_TOKEN: ${HUGGINGFACEHUB_API_TOKEN}
+      MONGODB_URI: ${MONGODB_URI}
+      REVISOR_MODELO: ${REVISOR_MODELO:-Qwen/Qwen2.5-72B-Instruct}
+    restart: unless-stopped
+
+  front:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+      args:
+        # URL onde o NAVEGADOR alcança a API (porta publicada da API no host)
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    image: tutor-turma-front
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped

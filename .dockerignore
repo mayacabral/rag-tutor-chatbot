@@ -1,0 +1,22 @@
+# --- segredos / ambiente (NUNCA vão para a imagem) ---
+.env
+*.env
+
+# --- ambientes virtuais Python ---
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- frontend (tem seu próprio build/Dockerfile) ---
+front/
+
+# --- git e docs ---
+.git/
+.gitignore
+*.md
+
+# --- scratch / SO ---
+.DS_Store
+Thumbs.db

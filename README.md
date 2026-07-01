@@ -108,6 +108,58 @@ O frontend sobe em **http://localhost:3000** e se conecta à API Python (configu
     └── server/_core/   # servidor Express que serve o Vite
 ```
 
+## Docker (containerização)
+
+O projeto tem duas imagens, orquestradas por `docker-compose.yml`:
+- **`api`** — a API Python (FastAPI/uvicorn), a partir do `Dockerfile` da raiz.
+- **`front`** — o build do Vite servido por **nginx**, a partir de `front/Dockerfile`.
+
+### Pré-requisitos
+- **Docker Desktop** instalado e rodando.
+- Um arquivo **`.env` na raiz** com as credenciais (o mesmo já usado localmente):
+  ```env
+  HUGGINGFACEHUB_API_TOKEN=hf_...
+  MONGODB_URI=mongodb+srv://USUARIO:SENHA@cluster0.xxxx.mongodb.net/?appName=Cluster0
+  ```
+
+### Subir tudo
+```bash
+docker compose up --build
+```
+- **Frontend:** http://localhost:3000
+- **API:** http://localhost:8000 (docs em `/docs`)
+
+Para rodar em segundo plano: `docker compose up --build -d`. Para parar: `docker compose down`.
+
+### Construir só a API (imagem única)
+```bash
+docker build -t tutor-turma-api .
+docker run --rm -p 8000:8000 --env-file .env tutor-turma-api
+```
+
+### Notas de container
+- **Segredos** (`HUGGINGFACEHUB_API_TOKEN`, `MONGODB_URI`) **não** vão dentro das imagens — entram por variável de ambiente (o compose lê o `.env` da raiz).
+- **MongoDB Atlas** continua na nuvem — não há container de banco. Garanta que seu IP esteja liberado em *Network Access* no Atlas.
+- A **URL da API** é embutida no bundle do front em tempo de build (`VITE_API_BASE_URL`, padrão `http://localhost:8000`), pois o navegador do usuário acessa a API diretamente.
+- A imagem da API usa **embeddings/LLM na nuvem** (HuggingFace), então **não** carrega `torch`/`sentence-transformers` — fica leve.
+
+## Estrutura do projeto
+
+```
+.
+├── Dockerfile              # imagem da API Python
+├── docker-compose.yml      # orquestra API + frontend
+├── rag.py                  # API FastAPI + pipeline RAG
+├── requirements.txt        # dependências Python (runtime)
+├── setup.ps1               # setup do ambiente local (Windows)
+├── .env                    # credenciais (NÃO versionado)
+└── front/
+    ├── Dockerfile          # build do Vite servido por nginx
+    ├── nginx.conf          # configuração do nginx (SPA)
+    ├── client/src/         # componentes, páginas, hooks
+    └── server/_core/       # servidor de desenvolvimento (Vite)
+```
+
 ## Notas
 
 - Há um documento de manutenção em [`front/PLANO_LIMPEZA.md`](front/PLANO_LIMPEZA.md) com o histórico da limpeza do código herdado da plataforma Manus.

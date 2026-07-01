@@ -1,7 +1,7 @@
 # ==========================================
-# Chatbot IA (RAG) — dependências
-# Compatível com Windows/Linux/macOS. No Windows, o pip baixa o
-# torch CPU automaticamente (não há necessidade de CUDA).
+# Tutor de Turma — API RAG (dependências de runtime)
+# Embeddings e LLMs são consumidos via API da HuggingFace (nuvem),
+# então NÃO é preciso torch/sentence-transformers localmente.
 # ==========================================
 
 # --- API / servidor HTTP ---
@@ -22,12 +22,6 @@ langchain-text-splitters>=0.3
 langchain-huggingface>=0.1
 langchain-mongodb>=0.2
 
-# --- Embeddings locais ---
-sentence-transformers>=3.0   # modelo all-MiniLM-L6-v2 (puxa o torch)
-
-# --- Banco vetorial ---
+# --- Banco vetorial (MongoDB Atlas) ---
 pymongo>=4.6
-
-# --- Testes ---
-pytest>=8.0
-httpx>=0.27
+dnspython>=2.6               # resolução do mongodb+srv://
