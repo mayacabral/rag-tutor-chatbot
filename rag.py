@@ -87,14 +87,15 @@ def dividir_em_chunks(documentos: list[Document], tamanho: int = 500, sobreposic
 # EMBEDDER — geração de embeddings
 # ==========================================
 
-EMBEDDER_PADRAO = "sentence-transformers/all-MiniLM-L6-v2"
-DIMENSOES_EMBEDDING = 384  # dimensão do vetor produzido por EMBEDDER_PADRAO
+EMBEDDER_PADRAO = "BAAI/bge-m3"
+DIMENSOES_EMBEDDING = 1024  # dimensão do vetor produzido por EMBEDDER_PADRAO
 
 
 def criar_embedder(modelo: str = EMBEDDER_PADRAO):
     # Embeddings via API da HuggingFace (nuvem) — não exige torch/sentence-transformers
-    # localmente. Usa o mesmo modelo (all-MiniLM-L6-v2, 384 dims) com que os documentos
-    # já indexados no Atlas foram gerados, mantendo a compatibilidade da busca vetorial.
+    # localmente. Usa o BAAI/bge-m3 (1024 dims): forte em retrieval multilíngue (PT),
+    # sem necessidade de prefixos "query/passage". Trocar o modelo exige reindexar
+    # os documentos e recriar o índice de Atlas Search com a nova dimensão.
     from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
     return HuggingFaceEndpointEmbeddings(
